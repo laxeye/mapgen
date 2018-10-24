@@ -2,14 +2,15 @@ package ru.lgm.mapgen.main
 
 import java.io.File
 
+//Barcode file is hardcoded now.
 val barcodeMap = createBarcodeMap("barcodes.txt")
 
 class MFString(
-	var lgmID: String = "",
+	var innerID: String = "",
 	val bcID: String = "",
 	val comment: String = ""
 ){
-	var atlasID: String = ""
+	var outerID: String = ""
 	var bcSeq: String = ""
 	var repl: String = "N/A"
 
@@ -19,16 +20,16 @@ class MFString(
 			Pair(bcArr[1].drop(1), bcArr[0].drop(1))
 		
 		
-		if ("repl" in lgmID){
-			val zlp: List<String> = lgmID.split(".")
+		if ("repl" in innerID){
+			val zlp: List<String> = innerID.split(".")
 			repl = zlp.last()
-			lgmID = zlp.dropLast(1).joinToString(".", "")
+			innerID = zlp.dropLast(1).joinToString(".", "")
 		}
 
 		if (barcodeMap.containsKey(bcRID) and barcodeMap.containsKey(bcFID)){
 			bcSeq = barcodeMap.get(bcRID) + barcodeMap.get(bcFID)
 		}else{
-			System.err.println("Error! Primer $bcRID or $bcFID not found for sample $lgmID!")
+			System.err.println("Error! Primer $bcRID or $bcFID not found for sample $innerID!")
 		}
 		
 		
@@ -40,24 +41,16 @@ fun incorrectLine(i: Int, line: String, cause: String){
 		System.err.println("Line $i: \"$line\" is incorrect! $cause!")
 	}
 
-fun createBarcodeMap(fn: String): Map<String,String>{
-	val barcodeMap = File(fn).readLines().map{it.split("\t")[0] to it.split("\t")[1]}.toMap()
-	return barcodeMap
-}
+fun createBarcodeMap(fn: String): Map<String,String> = File(fn).readLines().map{it.split("\t")[0] to it.split("\t")[1]}.toMap()
 
-fun createShitMap(fn: String): Map<String, String> {
-	val readyMap = File(fn).readLines().map{it.split("\t")[1] to it.split("\t")[0]}.toMap()
-	//val shitMap = pooIDList.associate(Pair(it.lgmID, it.atlasID)) 
-	//Reserve
-	return readyMap
-}
+fun createIDMap(fn: String): Map<String, String> = File(fn).readLines().map{it.split("\t")[1] to it.split("\t")[0]}.toMap()
 
 fun rpbc(fn: String): MutableList<MFString> {
 	
 	System.err.println("Checking mapping file: " + fn)
 	
 	val lines = File(fn).readLines()
-	val pooList = mutableListOf<MFString>()
+	val rowList = mutableListOf<MFString>()
 
 	var lineN: Int = 0
 	val primerSet: MutableSet<String> = mutableSetOf()
@@ -100,33 +93,30 @@ fun rpbc(fn: String): MutableList<MFString> {
 					}
 					idSet.add(id)
 					primerSet.add(primers)
-					pooList.add(MFString(id.replace(" ", "."), primers))
+					rowList.add(MFString(id.replace(" ", "."), primers))
 				}else{
 					incorrectLine(lineN, it, "Missing space between primers")
 				}
 			}else{
 				incorrectLine(lineN, it, "Missing tab")
 			}
-	
 	}
-
-	System.err.println(fn + " proceed");
-	return pooList
+	return rowList
 }
 
 
 fun genmf(fn1: String, fn2: String) {
-	val shitBCList = rpbc(fn1)
-	val shitMap = createShitMap(fn2)
+	val barcodeList = rpbc(fn1)
+	val iDMap = if (fn2 == "n/a") mapOf("" to "") else createIDMap(fn2)
 	val firstLine = "#SampleID\tBarcodeSequence\tLinkerPrimerSequence\tDescription"
 	println(firstLine)
-	fun getAtlas(lgm: String) = if (shitMap.containsKey(lgm)) shitMap.get(lgm) else lgm
+	fun getAtlas(lgm: String) = if (iDMap.containsKey(lgm)) iDMap.get(lgm) else lgm
 	//leave lgm id if not found in Map
-	shitBCList.forEach{
+	barcodeList.forEach{
 		if (it.repl == "N/A"){
-			println(getAtlas(it.lgmID) + "\t" + it.bcSeq + "\t\t" + it.lgmID)
+			println(getAtlas(it.innerID) + "\t" + it.bcSeq + "\t\t" + it.innerID)
 		}else{
-			println(getAtlas(it.lgmID) + "." + it.repl + "\t" + it.bcSeq + "\t\t" + it.lgmID + "." + it.repl)
+			println(getAtlas(it.innerID) + "." + it.repl + "\t" + it.bcSeq + "\t\t" + it.innerID + "." + it.repl)
 		}
 		
 	}
@@ -137,7 +127,7 @@ fun main(args: Array<String>) {
 	val helpMessage: String = "Mapping file generator for QIIME.\n\n" +
 	"Available options are:\n" +
 	"h(elp) - print short help message\n" +
-	"genmf <File lgm ID/Primers> <File atlas ID/lgm ID> - generate a mapping file\n" +
+	"genmf <File inner ID/Primers> [File outer ID/inner ID] - generate a mapping file\n" +
 	"check <File ID/Primers - check primers for duplication.\n" +
 	"Plese provide valid files for mapping file generatiion.\n" +
 	"Check README.TXT for further information and examples.";
@@ -148,6 +138,9 @@ fun main(args: Array<String>) {
 				if (task == "check"){
 					System.err.println("Checking primers.")
 					rpbc(fn1)
+				}else if(task == "genmf"){
+					System.err.println("Generating mapping file.")
+					genmf(fn1, "n/a")
 				}else{
 					System.err.println("Unknown task!\nNothing to do!\n$helpMessage")
 				}
